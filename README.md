@@ -25,6 +25,64 @@
 
 - [今日热榜 - https://hot.imsyy.top/](https://hot.imsyy.top/)
 
+## 🧩 多源归一化快照
+
+各榜单适配器输出的热度（字符串 / 数值）、时间（秒 / 毫秒）与链接（相对 / 重复）格式不一，
+`/snapshot` 接口支持一次请求多个来源并输出可稳定比较的归一化快照，且不改动任何现有单源接口。
+
+### 请求方式
+
+通过 `sources` 传逗号分隔的来源名，或重复使用 `source` 参数（两种写法可混用）：
+
+```text
+/snapshot?sources=weibo,zhihu,bilibili
+/snapshot?source=weibo&source=zhihu
+```
+
+来源名即单源接口路径名（见下方接口总览），保留输入顺序并自动去重；同样支持 `cache=false`。
+
+### 归一化规则
+
+- **热度 `hot`**：`"1.2万"`、`"3.5k"`、`"12,345"` 等字符串统一转为数值；无法解析时为 `null` 并记录诊断
+- **时间 `timestamp`**：秒 / 毫秒时间戳、带时区的日期字符串统一为带时区 ISO 8601（UTC，`...Z`）；缺失或无法解析时为 `null`
+- **ID `id`**：统一为字符串并在来源内去重（保留首次出现的记录）；ID 缺失时回退为 `来源名#源内序号`
+- **链接 `url` / `mobileUrl`**：补全协议相对 URL、去除哈希片段并排序查询参数，按规范化结果在来源内去重；相对 URL 原样保留
+- **原始值 `raw`**：每条记录完整保留适配器输出的原始字段
+- **故障隔离**：单个来源加载失败或数据结构损坏时，仅在该来源的 `diagnostics` 中记录诊断，不影响其他来源
+
+### 响应结构
+
+```jsonc
+{
+  "code": 200,
+  "snapshotTime": "2026-11-16T00:00:00.000Z", // 快照生成时间（ISO 8601）
+  "sources": ["weibo", "zhihu"],              // 来源名，保留输入顺序
+  "results": [
+    {
+      "name": "weibo",
+      "inputCount": 52,                        // 去重前条目数
+      "removed": 0,                            // 去重丢弃的条目数
+      "diagnostics": [],                       // 坏数据诊断，不影响其他来源
+      "items": [
+        {
+          "source": "weibo",
+          "index": 0,                          // 源内原始序号，输入顺序可追溯
+          "hot": null,
+          "timestamp": "2026-11-15T16:00:00.000Z",
+          "id": "5234819",
+          "url": "https://s.weibo.com/weibo?q=...",
+          "mobileUrl": "https://s.weibo.com/weibo?q=...",
+          "title": "示例热搜",
+          "raw": { /* 适配器输出的原始值 */ }
+        }
+      ]
+    }
+  ],
+  "total": 82,                                 // 全部来源去重后的记录总数
+  "failedSources": []                          // 加载失败的来源名
+}
+```
+
 ## 📊 接口总览
 
 <details>
